@@ -1,23 +1,1298 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visualisation D3.js</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Breathing Earth — 120 Years of Climate</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0f1e;
+      --cool: #4fc3f7;
+      --warm: #ff7043;
+      --text-hi: rgba(255,255,255,0.92);
+      --text-lo: rgba(255,255,255,0.48);
+      --glass: rgba(10,15,30,0.72);
+      --glass-border: rgba(255,255,255,0.11);
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text-hi);
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    #main-svg {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    #blob-group {
+      pointer-events: all;
+      cursor: pointer;
+    }
+
+    #intro {
+      position: relative;
+      z-index: 12;
+      min-height: 100vh;
+      width: min(860px, 86vw);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 10vh max(28px, 4vw);
+      pointer-events: none;
+    }
+
+    .intro-kicker {
+      color: var(--warm);
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 1.2rem;
+    }
+
+    #intro h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(3rem, 8vw, 7.2rem);
+      line-height: 0.92;
+      letter-spacing: 0;
+      max-width: 780px;
+    }
+
+    #intro p {
+      color: rgba(255,255,255,0.68);
+      font-size: clamp(1rem, 1.5vw, 1.18rem);
+      line-height: 1.75;
+      margin-top: 1.5rem;
+      max-width: 640px;
+    }
+
+    .intro-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      max-width: 760px;
+      margin-top: 2rem;
+    }
+
+    .metric {
+      border-top: 1px solid rgba(255,255,255,0.16);
+      padding-top: 14px;
+    }
+
+    .metric strong {
+      display: block;
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(1.7rem, 3.5vw, 3rem);
+      font-weight: 700;
+      color: var(--text-hi);
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 5px;
+      color: var(--text-lo);
+      font-size: 0.78rem;
+      line-height: 1.45;
+    }
+
+    #narrative {
+      position: relative;
+      z-index: 10;
+      width: 36vw;
+      max-width: 420px;
+      padding-left: max(28px, 4vw);
+      pointer-events: none;
+    }
+
+    .chapter {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 8vh 0;
+    }
+
+    .chapter-card {
+      background: var(--glass);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 1.8rem 2rem;
+      transition: border-color 0.7s ease;
+    }
+
+    .chapter-card.active { border-color: rgba(255,255,255,0.2); }
+
+    .ch-num {
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-lo);
+      display: block;
+      margin-bottom: 1rem;
+    }
+
+    .chapter-card h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(1.75rem, 2.8vw, 2.5rem);
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 1.1rem;
+    }
+
+    .chapter-card h2 em { font-style: italic; font-weight: 400; }
+
+    .chapter-card p {
+      font-size: 0.93rem;
+      line-height: 1.78;
+      color: var(--text-lo);
+      margin-bottom: 1.6rem;
+    }
+
+    .dtag {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 12px;
+      margin-bottom: 7px;
+    }
+
+    .dtag.live {
+      background: rgba(255,112,67,0.09);
+      border: 1px solid rgba(255,112,67,0.18);
+    }
+
+    .dtag-label {
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-lo);
+      min-width: 106px;
+    }
+
+    .dtag-val { font-size: 0.92rem; color: var(--text-hi); }
+
+    #filter-controls {
+      position: fixed;
+      bottom: 80px;
+      left: max(28px, 4vw);
+      z-index: 20;
+      display: flex;
+      gap: 7px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.45s ease;
+    }
+
+    #filter-controls.visible { opacity: 1; pointer-events: all; }
+
+    .pill {
+      font-family: 'Inter', sans-serif;
+      font-size: 11.5px;
+      font-weight: 500;
+      padding: 7px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      color: var(--text-lo);
+      cursor: pointer;
+      transition: all 0.28s ease;
+    }
+
+    .pill:hover { border-color: rgba(255,255,255,0.28); color: var(--text-hi); }
+    .pill.active {
+      background: rgba(255,255,255,0.09);
+      border-color: rgba(255,255,255,0.32);
+      color: var(--text-hi);
+    }
+
+    #tooltip {
+      position: fixed;
+      z-index: 100;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.18s ease;
+      background: rgba(8,12,28,0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 13px 17px;
+      min-width: 155px;
+    }
+
+    #tooltip.visible { opacity: 1; }
+
+    .tt-year {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 7px;
+    }
+
+    .tt-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      font-size: 11.5px;
+      color: var(--text-lo);
+      margin-bottom: 3px;
+    }
+
+    .tt-val { color: var(--text-hi); font-weight: 500; }
+    .ax-label { font-family: 'Inter', sans-serif; font-size: 10.5px; fill: rgba(255,255,255,0.32); }
+
+    #map-panel {
+      position: fixed;
+      inset: clamp(12px, 3vw, 34px);
+      z-index: 70;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 16px;
+      padding: clamp(18px, 2.4vw, 28px);
+      background: #050914;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 8px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(20px) scale(0.985);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+
+    #map-panel.visible {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateY(0) scale(1);
+    }
+
+    .map-header,
+    .map-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .map-kicker {
+      color: var(--text-lo);
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .map-header h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(1.7rem, 3vw, 3rem);
+      line-height: 1.05;
+      margin-top: 4px;
+    }
+
+    #map-close {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.06);
+      color: var(--text-hi);
+      font-size: 1.8rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .map-toolbar {
+      justify-content: flex-start;
+      color: var(--text-lo);
+      font-size: 0.82rem;
+    }
+
+    .map-toolbar label {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    #map-frame-select {
+      color: var(--text-hi);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 6px;
+      padding: 8px 34px 8px 10px;
+      font: inherit;
+    }
+
+    #map-note { color: rgba(255,255,255,0.44); }
+
+    .map-content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(270px, 330px);
+      gap: 20px;
+      min-height: 0;
+    }
+
+    .map-canvas,
+    .map-side {
+      min-height: 0;
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.035);
+    }
+
+    .map-canvas {
+      position: relative;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      overflow: hidden;
+    }
+
+    #map-svg {
+      width: 100%;
+      height: 100%;
+      min-height: 360px;
+    }
+
+    .country {
+      stroke: rgba(5,9,20,0.64);
+      stroke-width: 0.55;
+      outline: none;
+    }
+
+    .country:hover {
+      stroke: rgba(255,255,255,0.9);
+      stroke-width: 1.1;
+    }
+
+    #map-legend {
+      display: grid;
+      gap: 7px;
+      padding: 0 22px 18px;
+      color: var(--text-lo);
+      font-size: 0.72rem;
+    }
+
+    .legend-ramp {
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #440154, #31688e, #35b779, #fde725);
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .map-side {
+      padding: 18px;
+      overflow: auto;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .stat-box {
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 8px;
+      padding: 13px;
+      background: rgba(0,0,0,0.13);
+    }
+
+    .stat-box span,
+    .list-title {
+      color: var(--text-lo);
+      font-size: 0.66rem;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+
+    .stat-box strong {
+      display: block;
+      margin-top: 6px;
+      font-family: 'Playfair Display', serif;
+      font-size: 1.7rem;
+    }
+
+    .region-row,
+    .country-row {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr) 54px;
+      align-items: center;
+      gap: 10px;
+      margin-top: 9px;
+      color: rgba(255,255,255,0.72);
+      font-size: 0.78rem;
+    }
+
+    .bar-track {
+      height: 6px;
+      background: rgba(255,255,255,0.09);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: var(--warm);
+    }
+
+    .country-row {
+      grid-template-columns: minmax(0, 1fr) 58px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      padding-bottom: 8px;
+    }
+
+    #map-tooltip {
+      position: fixed;
+      z-index: 90;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.16s ease;
+      background: rgba(8,12,28,0.92);
+      border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 8px;
+      padding: 11px 13px;
+      min-width: 190px;
+      color: var(--text-hi);
+      font-size: 0.8rem;
+    }
+
+    #map-tooltip.visible { opacity: 1; }
+
+    @media (max-width: 820px) {
+      #narrative {
+        width: 100%;
+        max-width: none;
+        padding-right: max(24px, 6vw);
+      }
+
+      .intro-metrics {
+        grid-template-columns: 1fr;
+        max-width: 420px;
+      }
+
+      .chapter-card {
+        max-width: 440px;
+      }
+
+      .map-content {
+        grid-template-columns: 1fr;
+        overflow: auto;
+      }
+
+      .map-side {
+        overflow: visible;
+      }
+
+      #map-panel {
+        overflow: auto;
+      }
+
+      .map-header,
+      .map-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      #map-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+      }
+    }
+  </style>
 </head>
 <body>
-  <header>
-    <h1>Visualisation Interactive</h1>
-  </header>
 
-  <main>
-    <div id="controls"></div>
-    <div id="chart"></div>
-    <div class="tooltip" id="tooltip"></div>
-  </main>
+<svg id="main-svg" aria-hidden="true">
+  <defs>
+    <!-- feMorphology blob glow -->
+    <filter id="blob-glow" x="-70%" y="-70%" width="240%" height="240%">
+      <feMorphology in="SourceGraphic" operator="dilate" radius="12" result="dilated"/>
+      <feGaussianBlur id="glow-blur" in="dilated" stdDeviation="16" result="blurred"/>
+      <feMerge>
+        <feMergeNode in="blurred"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="co2-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop id="co2-grad-top" offset="0%" stop-color="#4fc3f7" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#4fc3f7" stop-opacity="0.0"/>
+    </linearGradient>
+    <linearGradient id="wave-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop id="wave-grad-top" offset="0%" stop-color="#ff7043" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#ff7043" stop-opacity="0.04"/>
+    </linearGradient>
+    <radialGradient id="atm-grad" cx="65%" cy="44%" r="52%">
+      <stop offset="0%" stop-color="#0f1d3a"/>
+      <stop offset="100%" stop-color="#0a0f1e"/>
+    </radialGradient>
+  </defs>
 
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="js/main.js"></script>
+  <rect width="100%" height="100%" fill="url(#atm-grad)"/>
+  <g id="particles"></g>
+
+  <g id="blob-group">
+    <path id="blob-outer" filter="url(#blob-glow)"/>
+    <path id="blob-inner"/>
+  </g>
+
+  <g id="co2-chart" opacity="0">
+    <path id="co2-area"/>
+    <path id="co2-line"/>
+    <g id="co2-x-axis"/>
+    <g id="co2-y-axis"/>
+    <g id="co2-dots"/>
+    <rect id="co2-zone" fill="transparent"/>
+  </g>
+
+  <g id="wave-group" opacity="0">
+    <path id="wave-a"/>
+    <path id="wave-b" opacity="0.35"/>
+  </g>
+
+  <g id="co2-counter" opacity="0">
+    <text id="ctr-value" text-anchor="middle"
+          font-family="'Playfair Display', serif"
+          font-size="72" fill="rgba(255,255,255,0.9)"/>
+    <text id="ctr-unit" text-anchor="middle" dy="1.35em"
+          font-family="Inter, sans-serif" font-size="13"
+          fill="rgba(255,255,255,0.42)">parts per million CO₂</text>
+  </g>
+
+  <g id="tl-group">
+    <rect id="tl-bg" rx="3"/>
+    <rect id="tl-highlight" rx="2" opacity="0.18"/>
+    <line id="tl-needle" stroke-width="1.5" stroke-opacity="0.65"/>
+    <g id="tl-axis"/>
+  </g>
+</svg>
+
+<section id="intro" aria-labelledby="intro-title">
+  <span class="intro-kicker">Climate change is severe</span>
+  <h1 id="intro-title">The numbers say the planet is heating.</h1>
+  <p>CO2 concentration rises, the temperature anomaly follows, and the pattern is no longer abstract. This page turns the climate record into a living signal: a growing sun, a measured timeline, and a country map for each period.</p>
+  <div class="intro-metrics" aria-label="Key climate indicators">
+    <div class="metric"><strong>424.6</strong><span>ppm CO2 in 2024 in this dataset</span></div>
+    <div class="metric"><strong>+1.28</strong><span>deg C global anomaly in 2024</span></div>
+    <div class="metric"><strong>193</strong><span>country codes available for map statistics</span></div>
+  </div>
+</section>
+
+<main id="narrative">
+  <section class="chapter" id="ch1" data-chapter="1">
+    <div class="chapter-card">
+      <span class="ch-num">01 — 1900 to 1950</span>
+      <h2>The Quiet<br><em>Earth</em></h2>
+      <p>Before the great acceleration, the planet breathed steadily. CO₂ hovered near 300 parts per million — a balance held for ten thousand years.</p>
+      <div class="dtag"><span class="dtag-label">CO₂</span><span class="dtag-val">~300 ppm</span></div>
+      <div class="dtag"><span class="dtag-label">Anomaly</span><span class="dtag-val">−0.3°C baseline</span></div>
+    </div>
+  </section>
+
+  <section class="chapter" id="ch2" data-chapter="2">
+    <div class="chapter-card">
+      <span class="ch-num">02 — 1950 to 1980</span>
+      <h2>The First<br><em>Signs</em></h2>
+      <p>The postwar surge left its mark. In 1958, Charles Keeling began measuring the air at Mauna Loa — and made the invisible visible.</p>
+      <div class="dtag"><span class="dtag-label">CO₂</span><span class="dtag-val">311 → 339 ppm</span></div>
+      <div class="dtag"><span class="dtag-label">Anomaly</span><span class="dtag-val">+0.0 → +0.3°C</span></div>
+    </div>
+  </section>
+
+  <section class="chapter" id="ch3" data-chapter="3">
+    <div class="chapter-card">
+      <span class="ch-num">03 — 1980 to 2010</span>
+      <h2>The<br><em>Acceleration</em></h2>
+      <p>Growth compounded. Each decade warmer than the last. The Earth's breathing quickened — and so did ours.</p>
+      <div class="dtag"><span class="dtag-label">CO₂</span><span class="dtag-val">339 → 390 ppm</span></div>
+      <div class="dtag"><span class="dtag-label">Anomaly</span><span class="dtag-val">+0.3 → +0.7°C</span></div>
+    </div>
+  </section>
+
+  <section class="chapter" id="ch4" data-chapter="4">
+    <div class="chapter-card">
+      <span class="ch-num">04 — 2010 to Now</span>
+      <h2><em>Now</em></h2>
+      <p>You are here. The warmest years in recorded history are happening now, in sequence. The pulse is feverish, urgent.</p>
+      <div class="dtag live"><span class="dtag-label">CO₂ Today</span><span class="dtag-val">424.6 ppm</span></div>
+      <div class="dtag live"><span class="dtag-label">Anomaly</span><span class="dtag-val">+1.28°C</span></div>
+    </div>
+  </section>
+</main>
+
+<div id="filter-controls">
+  <button class="pill active" data-mode="both">Both</button>
+  <button class="pill" data-mode="temp">Temperature</button>
+  <button class="pill" data-mode="co2">CO₂</button>
+</div>
+
+<div id="tooltip" class="tooltip">
+  <div class="tt-year" id="tt-year"></div>
+  <div class="tt-row"><span class="dtag-label">Temp anomaly</span><span class="tt-val" id="tt-temp"></span></div>
+  <div class="tt-row"><span class="dtag-label">CO₂</span><span class="tt-val" id="tt-co2"></span></div>
+</div>
+
+<section id="map-panel" aria-hidden="true" aria-labelledby="map-title">
+  <div class="map-header">
+    <div>
+      <span class="map-kicker">Map statistics</span>
+      <h2 id="map-title">Average temperature anomaly by country</h2>
+    </div>
+    <button id="map-close" type="button" aria-label="Close map statistics">&times;</button>
+  </div>
+  <div class="map-toolbar">
+    <label for="map-frame-select">Timeframe
+      <select id="map-frame-select"></select>
+    </label>
+    <span id="map-note">Country values use the available OWID annual anomaly data for the selected years.</span>
+  </div>
+  <div class="map-content">
+    <div class="map-canvas">
+      <svg id="map-svg" viewBox="0 0 980 560" preserveAspectRatio="xMidYMid meet" role="img" aria-label="World choropleth map of average temperature anomalies"></svg>
+      <div id="map-legend">
+        <div class="legend-ramp"></div>
+        <div class="legend-labels"><span>cooler anomaly</span><span>warmer anomaly</span></div>
+      </div>
+    </div>
+    <aside class="map-side">
+      <div class="stat-grid">
+        <div class="stat-box"><span>Average</span><strong id="map-avg">--</strong></div>
+        <div class="stat-box"><span>Countries</span><strong id="map-count">--</strong></div>
+      </div>
+      <div class="list-title">Regional average</div>
+      <div id="region-stats"></div>
+      <div class="list-title" style="margin-top:18px;">Warmest countries</div>
+      <div id="country-rank"></div>
+    </aside>
+  </div>
+</section>
+
+<div id="map-tooltip" class="tooltip"></div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const N_BLOB  = 12;
+const N_PARTS = 60;
+const C_COOL  = '#4fc3f7';
+const C_WARM  = '#ff7043';
+const colorInterp = d3.interpolateRgb(C_COOL, C_WARM);
+
+const CH_TARGETS = {
+  1: { temp: -0.30, co2: 303.0  },
+  2: { temp:  0.00, co2: 320.0  },
+  3: { temp:  0.44, co2: 361.0  },
+  4: { temp:  1.28, co2: 424.61 }
+};
+
+const CH_DEFS = {
+  1: { yr: [1900,1950], chart: false, wave: false, filt: false, ctr: false },
+  2: { yr: [1950,1980], chart: true,  wave: false, filt: false, ctr: false },
+  3: { yr: [1980,2010], chart: true,  wave: false, filt: true,  ctr: false },
+  4: { yr: [2010,2024], chart: true,  wave: true,  filt: false, ctr: true  }
+};
+
+const MAP_FRAMES = [
+  { id: 'ch1', label: '1900-1950', chapter: 1, yr: CH_DEFS[1].yr },
+  { id: 'ch2', label: '1950-1980', chapter: 2, yr: CH_DEFS[2].yr },
+  { id: 'ch3', label: '1980-2010', chapter: 3, yr: CH_DEFS[3].yr },
+  { id: 'ch4', label: '2010-2024', chapter: 4, yr: CH_DEFS[4].yr }
+];
+
+// ── Scales ────────────────────────────────────────────────────────────────────
+const scTempR  = d3.scaleLinear().domain([-0.5, 1.3]).range([220, 390]);
+const scTempC  = d3.scaleLinear().domain([-0.5, 1.3]).range([0, 1]);
+const scTempG  = d3.scaleLinear().domain([-0.5, 1.3]).range([10, 35]);
+const scCO2Spd = d3.scaleLinear().domain([295, 425]).range([0.48, 2.6]);
+const scCO2Amp = d3.scaleLinear().domain([295, 425]).range([0.10, 0.22]);
+const scCO2Wav = d3.scaleLinear().domain([295, 425]).range([25, 140]);
+const scCO2Prt = d3.scaleLinear().domain([295, 425]).range([0.3, 2.4]);
+const scMapTemp = d3.scaleSequential([-1.5, 1.5], d3.interpolateViridis).clamp(true);
+const scRegionBar = d3.scaleLinear().domain([-1.0, 1.5]).range([8, 100]).clamp(true);
+
+// ── Mutable blob state (tweened between chapters) ─────────────────────────────
+const bs = { r: 220, color: C_COOL, glow: 10, spd: 0.48, amp: 0.10 };
+let W, H, bCX, bCY;
+let currentChapter = 0, currentCO2 = 303, currentColor = C_COOL;
+let mergedData = [], wOff = 0, wOff2 = 1.8;
+let countryTemp = [], worldFeatures = [], mapPath, mapReady = false, mapOpen = false, currentMapFrame = 'ch1';
+let countryTempYearExtent = [1940, 2024];
+
+// Random phase offsets per blob point, fixed for session
+const blobPhases = Array.from({ length: N_BLOB }, (_, i) =>
+  (i / N_BLOB) * Math.PI * 2 + (Math.random() - 0.5) * 0.9
+);
+
+// Dummy element used as d3 tween target for plain-object state
+const tweenEl = document.createElement('div');
+
+// ── Blob path generator ───────────────────────────────────────────────────────
+const radialLine = d3.lineRadial()
+  .angle(d => d[0])
+  .radius(d => d[1])
+  .curve(d3.curveCatmullRomClosed.alpha(0.5));
+
+function makeBlobPath(t) {
+  const amp = bs.r * bs.amp;
+  return radialLine(blobPhases.map((ph, i) => [
+    (i / N_BLOB) * Math.PI * 2,
+    bs.r + amp * Math.sin(t * bs.spd + ph)
+         + amp * 0.38 * Math.sin(t * bs.spd * 0.65 + ph + 1.3)
+  ]));
+}
+
+// ── Particles ─────────────────────────────────────────────────────────────────
+let particles, partEls;
+
+function initParticles() {
+  particles = Array.from({ length: N_PARTS }, () => ({
+    x: Math.random() * W, y: Math.random() * H,
+    vx: (Math.random() - 0.5) * 0.9,
+    vy: (Math.random() - 0.5) * 0.9,
+    r:  Math.random() * 2.4 + 0.5,
+    op: Math.random() * 0.32 + 0.07
+  }));
+  partEls = d3.select('#particles')
+    .selectAll('circle').data(particles).join('circle')
+    .attr('r', d => d.r).attr('fill', C_COOL).attr('opacity', d => d.op);
+}
+
+// ── Chart + timeline layout ───────────────────────────────────────────────────
+let cL, cR, cT, cB, xT, yT, areaGen, lineGen, tlScale, tlY;
+
+function initChart() {
+  cL = W * 0.04; cR = W * 0.94;
+  cT = H * 0.48; cB = H * 0.92;
+
+  xT = d3.scaleTime()
+    .domain([new Date(1900, 0), new Date(2025, 0)]).range([cL, cR]);
+  yT = d3.scaleLinear().domain([285, 435]).range([cB, cT]);
+
+  areaGen = d3.area()
+    .x(d => xT(new Date(d.year, 0))).y0(cB).y1(d => yT(d.co2_ppm))
+    .curve(d3.curveCatmullRom.alpha(0.5));
+  lineGen = d3.line()
+    .x(d => xT(new Date(d.year, 0))).y(d => yT(d.co2_ppm))
+    .curve(d3.curveBasis);
+
+  d3.select('#co2-x-axis').attr('transform', `translate(0,${cB})`)
+    .call(d3.axisBottom(xT).ticks(d3.timeYear.every(20)).tickFormat(d3.timeFormat('%Y')).tickSize(3))
+    .call(g => {
+      g.select('.domain').attr('stroke', 'rgba(255,255,255,0.12)');
+      g.selectAll('.tick line').attr('stroke', 'rgba(255,255,255,0.12)');
+      g.selectAll('.tick text').attr('class', 'ax-label').attr('dy', '1.3em');
+    });
+
+  d3.select('#co2-y-axis').attr('transform', `translate(${cL},0)`)
+    .call(d3.axisLeft(yT).ticks(4).tickSize(3))
+    .call(g => {
+      g.select('.domain').attr('stroke', 'rgba(255,255,255,0.12)');
+      g.selectAll('.tick line').attr('stroke', 'rgba(255,255,255,0.12)');
+      g.selectAll('.tick text').attr('class', 'ax-label').attr('dx', '-0.4em');
+    });
+
+  // Y-axis label (remove old one first to avoid duplication on resize)
+  d3.select('#co2-y-axis').selectAll('.y-lbl').remove();
+  d3.select('#co2-y-axis').append('text').attr('class', 'ax-label y-lbl')
+    .attr('transform', 'rotate(-90)').attr('y', -28)
+    .attr('x', -(cT + cB) / 2).attr('text-anchor', 'middle').text('CO₂ (ppm)');
+
+  d3.select('#co2-zone')
+    .attr('x', cL).attr('y', cT)
+    .attr('width', cR - cL).attr('height', cB - cT)
+    .style('pointer-events', 'all').style('cursor', 'crosshair');
+
+  tlY = H * 0.952;
+  const tlH = 8, tlL = W * 0.04, tlR = W * 0.96;
+  tlScale = d3.scaleTime()
+    .domain([new Date(1900, 0), new Date(2025, 0)]).range([tlL, tlR]);
+
+  d3.select('#tl-bg')
+    .attr('x', tlL).attr('y', tlY - 1)
+    .attr('width', tlR - tlL).attr('height', tlH + 2)
+    .attr('fill', 'rgba(255,255,255,0.05)');
+  d3.select('#tl-highlight').attr('y', tlY - 1).attr('height', tlH + 2);
+  d3.select('#tl-needle').attr('y1', tlY - 7).attr('y2', tlY + tlH + 7);
+
+  d3.select('#tl-axis').attr('transform', `translate(0,${tlY + tlH + 2})`)
+    .call(d3.axisBottom(tlScale).ticks(d3.timeYear.every(20)).tickFormat(d3.timeFormat('%Y')).tickSize(3))
+    .call(g => {
+      g.select('.domain').remove();
+      g.selectAll('.tick line').attr('stroke', 'rgba(255,255,255,0.18)');
+      g.selectAll('.tick text').attr('class', 'ax-label');
+    });
+
+  d3.select('#ctr-value').attr('x', bCX).attr('y', bCY + 370);
+  d3.select('#ctr-unit').attr('x', bCX).attr('y', bCY + 380);
+}
+
+// ── CO2 chart update ──────────────────────────────────────────────────────────
+function updateChart(yr) {
+  const slice = mergedData.filter(d => d.year >= yr[0] && d.year <= yr[1]);
+  if (!slice.length) return;
+  d3.select('#co2-grad-top').attr('stop-color', currentColor);
+  d3.select('#co2-area').transition().duration(750)
+    .attr('d', areaGen(slice)).attr('fill', 'url(#co2-grad)');
+  d3.select('#co2-line').transition().duration(750)
+    .attr('d', lineGen(slice)).attr('fill', 'none')
+    .attr('stroke', currentColor).attr('stroke-width', 3).attr('stroke-opacity', 0.88);
+  d3.select('#co2-dots').selectAll('circle')
+    .data(slice.filter(d => d.year % 10 === 0)).join('circle')
+    .attr('cx', d => xT(new Date(d.year, 0))).attr('cy', d => yT(d.co2_ppm))
+    .attr('r', 6).attr('fill', currentColor)
+    .attr('stroke', 'rgba(255,255,255,0.28)').attr('stroke-width', 1)
+    .style('pointer-events', 'all').style('cursor', 'crosshair')
+    .on('mouseover', (e, d) => tipShow(e, d))
+    .on('mousemove', tipPos)
+    .on('mouseout', tipHide);
+}
+
+// ── Timeline update ───────────────────────────────────────────────────────────
+function updateTimeline(yr) {
+  if (!tlScale) return;
+  const x0 = tlScale(new Date(yr[0], 0)), x1 = tlScale(new Date(yr[1], 0));
+  d3.select('#tl-highlight').transition().duration(600)
+    .attr('x', x0).attr('width', x1 - x0).attr('fill', currentColor);
+  d3.select('#tl-needle').transition().duration(600)
+    .attr('x1', (x0 + x1) / 2).attr('x2', (x0 + x1) / 2).attr('stroke', currentColor);
+}
+
+// ── Chapter activation ────────────────────────────────────────────────────────
+function activateChapter(n) {
+  if (currentChapter === n) return;
+  currentChapter = n;
+  const tgt = CH_TARGETS[n];
+  const def = CH_DEFS[n];
+  currentCO2   = tgt.co2;
+  currentColor = colorInterp(scTempC(tgt.temp));
+
+  // Tween all blob-state properties simultaneously
+  d3.select(tweenEl).interrupt('bs').transition('bs').duration(1200).ease(d3.easeCubicInOut)
+    .tween('bs', () => {
+      const iR = d3.interpolate(bs.r,     scTempR(tgt.temp));
+      const iC = d3.interpolateRgb(bs.color, currentColor);
+      const iG = d3.interpolate(bs.glow,  scTempG(tgt.temp));
+      const iS = d3.interpolate(bs.spd,   scCO2Spd(tgt.co2));
+      const iA = d3.interpolate(bs.amp,   scCO2Amp(tgt.co2));
+      return t => {
+        bs.r = iR(t); bs.color = iC(t); bs.glow = iG(t); bs.spd = iS(t); bs.amp = iA(t);
+      };
+    });
+
+  d3.select('#glow-blur').transition().duration(800).attr('stdDeviation', scTempG(tgt.temp));
+  d3.select('#co2-chart').transition().duration(650).attr('opacity', def.chart ? 1 : 0);
+  d3.select('#wave-group').transition().duration(650).attr('opacity', def.wave ? 1 : 0);
+  d3.select('#co2-counter').transition().duration(650).attr('opacity', def.ctr ? 1 : 0);
+  d3.select('#filter-controls').classed('visible', def.filt);
+
+  if (def.chart) updateChart(def.yr);
+  updateTimeline(def.yr);
+
+  d3.selectAll('.chapter-card').classed('active', false);
+  d3.select(`#ch${n} .chapter-card`).classed('active', true);
+
+  if (def.ctr) {
+    d3.select(tweenEl).interrupt('ctr').transition('ctr').duration(2200).ease(d3.easeCubicOut)
+      .tween('ctr', () => {
+        const i = d3.interpolate(315, tgt.co2);
+        return t => d3.select('#ctr-value').text(i(t).toFixed(1));
+      });
+  }
+
+  if (mapOpen && mapReady) renderMap(`ch${n}`);
+}
+
+// ── Tooltip (module-level so updateChart can reuse) ───────────────────────────
+const tip = d3.select('#tooltip');
+const tipPos  = evt => tip.style('left', (evt.clientX + 16) + 'px').style('top', (evt.clientY - 12) + 'px');
+const tipShow = (evt, d) => {
+  document.getElementById('tt-year').textContent = d.year;
+  document.getElementById('tt-temp').textContent =
+    (d.temp_anomaly >= 0 ? '+' : '') + d.temp_anomaly.toFixed(2) + '°C';
+  document.getElementById('tt-co2').textContent = d.co2_ppm.toFixed(1) + ' ppm';
+  tip.classed('visible', true);
+  tipPos(evt);
+};
+const tipHide = () => tip.classed('visible', false);
+
+function setupTooltip() {
+  // Hover on decade dots — events bound to circles in updateChart()
+  // Hover anywhere on the chart area to find nearest year
+  d3.select('#co2-zone')
+    .on('mousemove', function(evt) {
+      if (!mergedData.length || !xT) return;
+      const yr = xT.invert(d3.pointer(evt, this)[0]).getFullYear();
+      const near = mergedData.reduce((a, b) =>
+        Math.abs(b.year - yr) < Math.abs(a.year - yr) ? b : a);
+      tipShow(evt, near);
+    })
+    .on('mouseout', tipHide);
+}
+
+// ── Filter pills ──────────────────────────────────────────────────────────────
+function setupFilters() {
+  d3.selectAll('.pill').on('click', function() {
+    d3.selectAll('.pill').classed('active', false);
+    d3.select(this).classed('active', true);
+    const m = this.dataset.mode;
+    d3.select('#blob-group').transition().duration(450).attr('opacity', m !== 'co2'  ? 1 : 0);
+    d3.select('#co2-chart').transition().duration(450).attr('opacity', m !== 'temp' ? 1 : 0);
+  });
+}
+
+// ── Map statistics panel ─────────────────────────────────────────────────────
+const mapSvg = d3.select('#map-svg');
+const mapTip = d3.select('#map-tooltip');
+
+function fmtTemp(v) {
+  return Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${v.toFixed(2)} deg C` : 'No data';
+}
+
+function featureCode(d) {
+  const p = d.properties || {};
+  return (p.ADM0_A3 && p.ADM0_A3 !== '-99' ? p.ADM0_A3 : p.SOV_A3) || p.ISO_A3 || '';
+}
+
+function featureName(d) {
+  const p = d.properties || {};
+  return p.NAME_LONG || p.ADMIN || p.NAME || 'Unknown';
+}
+
+function setupMapControls() {
+  d3.select('#map-frame-select')
+    .selectAll('option')
+    .data(MAP_FRAMES)
+    .join('option')
+    .attr('value', d => d.id)
+    .text(d => d.label);
+
+  d3.select('#map-frame-select').on('change', function() {
+    renderMap(this.value);
+  });
+
+  d3.select('#map-close').on('click', closeMap);
+  d3.select(window).on('keydown.map', evt => {
+    if (evt.key === 'Escape') closeMap();
+  });
+}
+
+function setupSunMap() {
+  d3.select('#blob-group')
+    .attr('role', 'button')
+    .attr('tabindex', 0)
+    .attr('aria-label', 'Open map statistics')
+    .on('click', () => {
+      tipHide();
+      openMap();
+    })
+    .on('keydown', evt => {
+      if (evt.key === 'Enter' || evt.key === ' ') {
+        evt.preventDefault();
+        openMap();
+      }
+    })
+    .on('mousemove', evt => {
+      document.getElementById('tt-year').textContent = mapReady ? 'Map statistics' : 'Map data loading';
+      document.getElementById('tt-temp').textContent = mapReady ? 'Country heat map' : 'Please wait';
+      document.getElementById('tt-co2').textContent = currentChapter ? MAP_FRAMES[currentChapter - 1].label : '1900-1950';
+      tip.classed('visible', true);
+      tipPos(evt);
+    })
+    .on('mouseout', tipHide);
+}
+
+function openMap() {
+  if (!mapReady) return;
+  mapOpen = true;
+  currentMapFrame = currentChapter ? `ch${currentChapter}` : currentMapFrame;
+  d3.select('#map-panel').classed('visible', true).attr('aria-hidden', 'false');
+  renderMap(currentMapFrame);
+}
+
+function closeMap() {
+  mapOpen = false;
+  d3.select('#map-panel').classed('visible', false).attr('aria-hidden', 'true');
+  mapTip.classed('visible', false);
+}
+
+function initMap(worldGeo) {
+  if (!worldGeo || !worldGeo.features || !countryTemp.length) return;
+  worldFeatures = worldGeo.features
+    .filter(d => featureName(d) !== 'Antarctica')
+    .sort((a, b) => d3.ascending(featureName(a), featureName(b)));
+
+  const projection = d3.geoNaturalEarth1()
+    .fitExtent([[20, 18], [960, 498]], { type: 'FeatureCollection', features: worldFeatures });
+  mapPath = d3.geoPath(projection);
+  mapReady = true;
+
+  mapSvg.selectAll('path.country')
+    .data(worldFeatures, d => featureCode(d) || featureName(d))
+    .join('path')
+    .attr('class', 'country')
+    .attr('d', mapPath)
+    .attr('fill', 'rgba(255,255,255,0.07)')
+    .style('cursor', 'crosshair')
+    .on('mousemove', (evt, d) => {
+      const stats = computeFrameStats(MAP_FRAMES.find(f => f.id === currentMapFrame) || MAP_FRAMES[0]);
+      const country = stats.valueByCode.get(featureCode(d));
+      mapTip.html('');
+      mapTip.append('div').style('font-weight', '700').style('margin-bottom', '5px').text(featureName(d));
+      mapTip.append('div').style('color', 'rgba(255,255,255,0.58)').text(`${stats.start}-${stats.end}`);
+      mapTip.append('div').style('margin-top', '5px').text(`Average anomaly: ${fmtTemp(country ? country.value : NaN)}`);
+      mapTip
+        .style('left', (evt.clientX + 14) + 'px')
+        .style('top', (evt.clientY - 10) + 'px')
+        .classed('visible', true);
+    })
+    .on('mouseout', () => mapTip.classed('visible', false));
+}
+
+function computeFrameStats(frame) {
+  const featureCodes = new Set(worldFeatures.map(featureCode).filter(Boolean));
+  const start = Math.max(frame.yr[0], countryTempYearExtent[0]);
+  const end = Math.min(frame.yr[1], countryTempYearExtent[1]);
+  const rows = countryTemp.filter(d =>
+    d.year >= start && d.year <= end && featureCodes.has(d.code)
+  );
+
+  const valueByCode = new Map(
+    d3.rollups(rows, v => ({
+      value: d3.mean(v, d => d.anomaly),
+      years: v.length
+    }), d => d.code)
+  );
+
+  const countryRows = worldFeatures
+    .map(feature => {
+      const stat = valueByCode.get(featureCode(feature));
+      return stat ? {
+        name: featureName(feature),
+        code: featureCode(feature),
+        region: feature.properties.CONTINENT || feature.properties.REGION_UN || 'Other',
+        value: stat.value
+      } : null;
+    })
+    .filter(Boolean)
+    .filter(d => Number.isFinite(d.value));
+
+  const regionRows = d3.rollups(
+    countryRows,
+    v => d3.mean(v, d => d.value),
+    d => d.region
+  )
+    .map(([region, value]) => ({ region, value }))
+    .sort((a, b) => d3.descending(a.value, b.value));
+
+  return {
+    start,
+    end,
+    valueByCode,
+    countryRows,
+    regionRows,
+    average: d3.mean(countryRows, d => d.value),
+    warmest: countryRows.slice().sort((a, b) => d3.descending(a.value, b.value)).slice(0, 7)
+  };
+}
+
+function renderMap(frameId) {
+  if (!mapReady || !mapPath) return;
+  const frame = MAP_FRAMES.find(d => d.id === frameId) || MAP_FRAMES[0];
+  currentMapFrame = frame.id;
+  const stats = computeFrameStats(frame);
+
+  d3.select('#map-frame-select').property('value', frame.id);
+  d3.select('#map-title').text(`Average temperature anomaly, ${frame.label}`);
+  d3.select('#map-note').text(`Available map data: ${stats.start}-${stats.end}. Baseline: 1991-2020 mean.`);
+  d3.select('#map-avg').text(fmtTemp(stats.average));
+  d3.select('#map-count').text(stats.countryRows.length);
+
+  mapSvg.selectAll('path.country')
+    .data(worldFeatures, d => featureCode(d) || featureName(d))
+    .join('path')
+    .attr('class', 'country')
+    .attr('d', mapPath)
+    .transition()
+    .duration(750)
+    .attr('fill', d => {
+      const stat = stats.valueByCode.get(featureCode(d));
+      return stat && Number.isFinite(stat.value) ? scMapTemp(stat.value) : 'rgba(255,255,255,0.07)';
+    });
+
+  const maxRegion = d3.max(stats.regionRows, d => d.value) || 1;
+  const minRegion = d3.min(stats.regionRows, d => d.value) || -1;
+  scRegionBar.domain([minRegion, maxRegion]);
+
+  d3.select('#region-stats')
+    .selectAll('.region-row')
+    .data(stats.regionRows, d => d.region)
+    .join(
+      enter => {
+        const row = enter.append('div').attr('class', 'region-row');
+        row.append('span').text(d => d.region);
+        row.append('div').attr('class', 'bar-track').append('div').attr('class', 'bar-fill');
+        row.append('strong');
+        return row;
+      },
+      update => update,
+      exit => exit.remove()
+    )
+    .call(rows => {
+      rows.select('.bar-fill').transition().duration(750)
+        .style('width', d => `${scRegionBar(d.value)}%`)
+        .style('background', d => scMapTemp(d.value));
+      rows.select('strong').text(d => fmtTemp(d.value));
+    });
+
+  d3.select('#country-rank')
+    .selectAll('.country-row')
+    .data(stats.warmest, d => d.code)
+    .join(
+      enter => {
+        const row = enter.append('div').attr('class', 'country-row');
+        row.append('span');
+        row.append('strong');
+        return row;
+      },
+      update => update,
+      exit => exit.remove()
+    )
+    .call(rows => {
+      rows.select('span').text(d => d.name);
+      rows.select('strong').text(d => fmtTemp(d.value));
+    });
+}
+
+// ── Intersection Observer ─────────────────────────────────────────────────────
+function setupObserver() {
+  const obs = new IntersectionObserver(
+    entries => entries.forEach(e => { if (e.isIntersecting) activateChapter(+e.target.dataset.chapter); }),
+    { threshold: 0.42 }
+  );
+  document.querySelectorAll('.chapter').forEach(el => obs.observe(el));
+}
+
+// ── Animation loop ────────────────────────────────────────────────────────────
+function animate(ts) {
+  const t = ts / 1000;
+  const path = makeBlobPath(t);
+
+  d3.select('#blob-outer').attr('d', path).attr('fill', bs.color).attr('stroke', 'none');
+  d3.select('#blob-inner').attr('d', path).attr('fill', bs.color)
+    .attr('stroke', bs.color).attr('stroke-width', 4.5).attr('stroke-opacity', 0.65);
+
+  const spd = scCO2Prt(currentCO2);
+  particles.forEach(p => {
+    p.x = (p.x + p.vx * spd + W) % W;
+    p.y = (p.y + p.vy * spd + H) % H;
+  });
+  partEls
+    .attr('cx', d => d.x).attr('cy', d => d.y)
+    .attr('fill', bs.color)
+    .attr('opacity', d => d.op * Math.min(1, 0.4 + spd * 0.25));
+
+  if (currentChapter === 4) {
+    wOff += 0.017; wOff2 += 0.011;
+    const amp = scCO2Wav(currentCO2);
+    const baseY = H * 0.72;
+    const wPts = Array.from({ length: 50 }, (_, i) => [
+      (i / 49) * W,
+      baseY + Math.sin(i * 0.36 + wOff) * amp + Math.sin(i * 0.63 + wOff2) * amp * 0.42
+    ]);
+    const wArea = d3.area().x(d => d[0]).y0(H).y1(d => d[1])
+      .curve(d3.curveCatmullRom.alpha(0.5));
+    d3.select('#wave-grad-top').attr('stop-color', bs.color);
+    d3.select('#wave-a').attr('d', wArea(wPts)).attr('fill', 'url(#wave-grad)');
+    d3.select('#wave-b')
+      .attr('d', wArea(wPts.map(([x, y]) => [x, y + Math.sin(x * 0.006 + wOff * 0.5) * 18])))
+      .attr('fill', bs.color);
+  }
+
+  requestAnimationFrame(animate);
+}
+
+// ── Dimensions ────────────────────────────────────────────────────────────────
+function computeDims() {
+  const el = document.getElementById('main-svg');
+  W = el.clientWidth  || window.innerWidth;
+  H = el.clientHeight || window.innerHeight;
+  const minSide = Math.min(W, H);
+  scTempR.range([minSide * 0.25, minSide * 0.48]);
+  if (currentChapter && CH_TARGETS[currentChapter]) bs.r = scTempR(CH_TARGETS[currentChapter].temp);
+  bCX = W * 0.66;
+  bCY = H * 0.43;
+  d3.select('#blob-group').attr('transform', `translate(${bCX},${bCY})`);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  computeDims();
+
+  const [tempRaw, co2Raw] = await Promise.all([
+    d3.csv('data/gistemp.csv', d => ({ year: +d.year, temp_anomaly: +d.temp_anomaly })),
+    d3.csv('data/co2.csv',     d => ({ year: +d.year, co2_ppm:      +d.co2_ppm     }))
+  ]).catch(err => {
+    console.error('Data load failed. Serve via HTTP: python -m http.server 8080', err);
+    return [[], []];
+  });
+
+  const [countryRaw, worldGeo] = await Promise.all([
+    d3.csv('data/country_temperature_anomaly.csv', d => ({
+      entity: d.Entity,
+      code: d.Code,
+      year: +d.Year,
+      anomaly: +d['Temperature anomaly']
+    })),
+    d3.json('data/world-countries.geojson')
+  ]).catch(err => {
+    console.error('Map data load failed.', err);
+    return [[], null];
+  });
+
+  const co2Map = new Map(co2Raw.map(d => [d.year, d.co2_ppm]));
+  mergedData = tempRaw
+    .filter(d => d.year >= 1900 && d.year <= 2024)
+    .map(d => ({ ...d, co2_ppm: co2Map.get(d.year) ?? null }))
+    .filter(d => d.co2_ppm !== null);
+
+  countryTemp = countryRaw
+    .filter(d => /^[A-Z]{3}$/.test(d.code) && Number.isFinite(d.year) && Number.isFinite(d.anomaly));
+  countryTempYearExtent = d3.extent(countryTemp, d => d.year);
+  if (!Number.isFinite(countryTempYearExtent[0])) countryTempYearExtent = [1940, 2024];
+
+  initParticles();
+  initChart();
+  initMap(worldGeo);
+  setupTooltip();
+  setupFilters();
+  setupMapControls();
+  setupSunMap();
+  setupObserver();
+  activateChapter(1);
+  requestAnimationFrame(animate);
+
+  window.addEventListener('resize', () => { computeDims(); initChart(); });
+}
+
+init();
+</script>
 </body>
 </html>
